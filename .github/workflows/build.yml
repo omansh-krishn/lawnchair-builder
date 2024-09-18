@@ -1,0 +1,77 @@
+name: Lawnchair
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: lawnchair repo branch name
+        type: string
+        required: true
+
+      target:
+        description: build type
+        type: string
+        required: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux/archlinux:latest
+
+    steps:
+
+      - name: Setup System
+        run: |
+          pacman-key --init
+          pacman-key --populate
+          pacman -Syy --noconfirm
+          pacman -Syu --noconfirm
+          pacman -S base-devel git wget sudo --noconfirm
+
+      - name: Clone repo
+        run: |
+          git clone https://github.com/LawnchairLauncher/lawnchair -b ${{ github.event.inputs.branch }} --single-branch --depth=1
+          cd lawnchair
+          git submodule update --init --recursive
+          echo "COMM_HASH_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Dependencies
+        run: |
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" | tee -a /etc/sudoers
+          sed -i '/^OPTIONS=/ s/\<debug\>/!debug/g' /etc/makepkg.conf
+          export __REQ_JAVA_VER__=$(grep -oP '(?<=JavaLanguageVersion.of\()[0-9]+' lawnchair/build.gradle)
+
+          su builder -c "git clone https://aur.archlinux.org/zulu-${__REQ_JAVA_VER__}-bin.git /home/builder/build && cd /home/builder/build \
+                         && makepkg --syncdeps --noconfirm --needed --install; rm -rf /home/builder/build"
+          
+          append_path() { case ":$PATH:" in *:"$1":*) ;; *) PATH="$1:$PATH";; esac; }
+          source /etc/profile /etc/profile.d/jre.sh
+
+          su builder -c "git clone https://aur.archlinux.org/sdkmanager.git /home/builder/build && cd /home/builder/build \
+                         && makepkg --syncdeps --noconfirm --needed --install; rm -rf /home/builder/build"
+          yes | sdkmanager --licenses
+
+      - name: Build
+        run: |
+          cd lawnchair
+
+          printf "%s" "${{ secrets.KEYSTORE }}" | base64 -d > key.store
+          printf "%s" "${{ secrets.KEYSTOREPROPS }}" | base64 -d > keystore.properties
+          echo "storeFile=$(pwd)/key.store" >> keystore.properties 
+          export ANDROID_HOME=/opt/android-sdk
+          unset GITHUB_RUN_NUMBER
+          unset GITHUB_REF
+
+          ./gradlew ${{ github.event.inputs.target }}
+
+          echo "REPO_PATH=$(pwd)" >> $GITHUB_ENV
+
+      - name: Upload artifact to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: lawnchair-${{ github.event.inputs.branch }}-${{ env.COMM_HASH_SHORT }}-${{ github.event.inputs.target }}
+          tag_name: ${{ github.event.inputs.branch }}-${{ env.COMM_HASH_SHORT }}-${{ github.event.inputs.target }}
+          token: ${{ secrets.PAT }}
+          files: ${{ env.REPO_PATH }}/build/outputs/apk/**/**/**apk
+
