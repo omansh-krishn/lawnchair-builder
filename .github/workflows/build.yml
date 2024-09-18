@@ -67,11 +67,21 @@ jobs:
 
           echo "REPO_PATH=$(pwd)" >> $GITHUB_ENV
 
+          echo 'BRANCH: [${{ github.event.inputs.branch }}](https://github.com/LawnchairLauncher/lawnchair/tree/${{ github.event.inputs.branch }})' > message
+          echo 'COMMIT: [${{ env.COMM_HASH_SHORT }}](https://github.com/LawnchairLauncher/lawnchair/commit/${{ env.COMM_HASH_SHORT }})' >> message
+          echo 'TYPE: ${{ github.event.inputs.target }}' >> message
+          echo "SHA256SUM: $(sha256sum build/outputs/apk/**/**/**apk|cut -d ' ' -f 1)" >> message
+
       - name: Upload artifact to Release
         uses: softprops/action-gh-release@v2
         with:
           name: lawnchair-${{ github.event.inputs.branch }}-${{ env.COMM_HASH_SHORT }}-${{ github.event.inputs.target }}
           tag_name: ${{ github.event.inputs.branch }}-${{ env.COMM_HASH_SHORT }}-${{ github.event.inputs.target }}
           token: ${{ secrets.PAT }}
+          body_path: ${{ env.REPO_PATH }}/message
           files: ${{ env.REPO_PATH }}/build/outputs/apk/**/**/**apk
 
+      - name: Send to TG
+        run: |
+          curl https://raw.githubusercontent.com/fabianonline/telegram.sh/refs/heads/master/telegram > telegram; chmod +x telegram
+          ./telegram -t ${{ secrets.BOTTOKEN }} -c ${{ secrets.CHATID }} -f ${{ env.REPO_PATH }}/build/outputs/apk/**/**/**apk "$(cat ${{ env.REPO_PATH }}/message)" 
