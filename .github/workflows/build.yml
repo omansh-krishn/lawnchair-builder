@@ -62,7 +62,7 @@ jobs:
           export ANDROID_HOME=/opt/android-sdk
           unset GITHUB_RUN_NUMBER
           unset GITHUB_REF
-
+          chmod +x gradlew
           ./gradlew ${{ github.event.inputs.target }}
 
           echo "REPO_PATH=$(pwd)" >> $GITHUB_ENV
