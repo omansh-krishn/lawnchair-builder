@@ -40,7 +40,7 @@ jobs:
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" | tee -a /etc/sudoers
           sed -i '/^OPTIONS=/ s/\<debug\>/!debug/g' /etc/makepkg.conf
-          export __REQ_JAVA_VER__=$(grep -oP '(?<=JavaLanguageVersion.of\()[0-9]+' lawnchair/build.gradle)
+          export __REQ_JAVA_VER__=$(grep -oP '(?<=java-version: ).*' lawnchair/.github/workflows/build_release_apk.yml)
 
           su builder -c "git clone https://aur.archlinux.org/zulu-${__REQ_JAVA_VER__}-bin.git /home/builder/build && cd /home/builder/build \
                          && makepkg --syncdeps --noconfirm --needed --install; rm -rf /home/builder/build"
